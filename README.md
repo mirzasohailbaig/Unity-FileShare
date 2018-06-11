@@ -16,6 +16,8 @@ At the start you need action (ex. lambda function) after receive file on client 
 ## Warning
 Unity message are identified by "short" value. This script is using Unity highest (47) + 1. If you are using this message number, you can change it directly in script region "network message stuff".
 
+While you are testing sharing files, use two computers. Windows not allowing open same port for multiple instances.
+
 Tested on Unity 5.5 and 2017.2. Tested only on Windows.
 
 \
