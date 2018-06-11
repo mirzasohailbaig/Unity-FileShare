@@ -9,7 +9,6 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Networking;
-using UD = UnityEngine.Debug;
 
 /// <summary>
 /// Sending files through network on the background with TCP
@@ -133,8 +132,9 @@ public sealed class FileShare : MonoBehaviour
                 port = port
             });
 
-            if (UD.isDebugBuild)
-                UD.Log("Sending file \"" + file + "\" through port " + port);
+#if UNITY_EDITOR
+            UnityEngine.Debug.Log("Sending file \"" + file + "\" through port " + port);
+#endif
 
             foreach (var conn in NetworkServer.connections)
             {
@@ -190,8 +190,7 @@ public sealed class FileShare : MonoBehaviour
         }
         catch (Exception e)
         {
-            if (UD.isDebugBuild)
-                File.AppendAllText("fileshare.log", "[" + DateTime.Now.ToString() + "] " + e.Source + ": " + e.Message + "\n" + e.StackTrace + "\n\n");
+            File.AppendAllText("fileshare.log", "[" + DateTime.Now.ToString() + "] " + e.Source + ": " + e.Message + "\n" + e.StackTrace + "\n\n");
         }
     }
 
@@ -242,8 +241,7 @@ public sealed class FileShare : MonoBehaviour
         }
         catch (Exception e)
         {
-            if (UD.isDebugBuild)
-                File.AppendAllText("fileshare.log", "[" + DateTime.Now.ToString() + "] " + e.Source + ": " + e.Message + "\n" + e.StackTrace + "\n\n");
+            File.AppendAllText("fileshare.log", "[" + DateTime.Now.ToString() + "] " + e.Source + ": " + e.Message + "\n" + e.StackTrace + "\n\n");
         }
     }
 
