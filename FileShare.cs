@@ -128,10 +128,7 @@ public sealed class FileShare : MonoBehaviour
         NetConn msg = netMsg.ReadMessage<NetConn>();
 
         foreach (var addr in msg.addresses)
-        {
-            //initialize sender
-            new Thread(() => Client(addr.Replace("::ffff:", ""), msg.port, msg.file)).Start();
-        }
+            InvokeThread(addr, msg.port, msg.file);
     }
 
     IEnumerator WaitForReceivedFile(string crc)
@@ -164,6 +161,7 @@ public sealed class FileShare : MonoBehaviour
     {
         if (file == null || file == string.Empty || !File.Exists(file))
             throw new Exception("Non valid file");
+
         if (ports.Count >= (instance.portRangeTo - instance.portRangeFrom))
             throw new Exception("Not available port");
 
@@ -172,20 +170,41 @@ public sealed class FileShare : MonoBehaviour
             port++;
         ports.Add(port);
 
-        //msg to clients, to be prepared
-        NetworkManager.singleton.client.Send(fileSharePrepare, new FileSharePrepare()
+        var prepareMsg = new FileSharePrepare()
         {
             crc = GetCRC(file),
             receiveAction = receiveAction,
             extension = Path.GetExtension(file),
             port = port
-        });
+        };
 
-        NetworkManager.singleton.client.Send(getClientsSendFile, new NetConn()
+        //msg to clients, to be prepared
+        if (NetworkClient.active)
         {
-            port = port,
-            file = file
-        });
+            NetworkManager.singleton.client.Send(fileSharePrepare, prepareMsg);
+            NetworkManager.singleton.client.Send(getClientsSendFile, new NetConn()
+            {
+                port = port,
+                file = file
+            });
+        }
+        else if (NetworkServer.active)
+        {
+            NetworkServer.SendToAll(fileSharePrepare, prepareMsg);
+            foreach (var conn in NetworkServer.connections)
+            {
+                if (conn != null)
+                    InvokeThread(conn.address, port, file);
+            }
+        }
+    }
+
+    static void InvokeThread(string address, int port, string file)
+    {
+        if (address == null)
+            return;
+
+        new Thread(() => Client(address.Replace("::ffff:", ""), port, file)).Start();
     }
 
     /// <summary>
