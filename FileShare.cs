@@ -162,6 +162,8 @@ public sealed class FileShare : MonoBehaviour
     /// <param name="receiveAction">Action identifier after receiving a file</param>
     public static void Send(string file, string receiveAction)
     {
+        if (file == null || file == string.Empty || !File.Exists(file))
+            throw new Exception("Non valid file");
         if (ports.Count >= (instance.portRangeTo - instance.portRangeFrom))
             throw new Exception("Not available port");
 
