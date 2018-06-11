@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
@@ -21,15 +21,23 @@ public sealed class FileShare : MonoBehaviour
     public int bufferSize = 1024;
     public int timeout = 10;
 
-
     #region network message stuff
     const short fileSharePrepare = MsgType.Highest + 1;
+    const short getClientsSendFile = MsgType.Highest + 2;
+
     class FileSharePrepare : MessageBase
     {
         public string crc;
         public string receiveAction;
         public string extension;
         public int port;
+    }
+
+    class NetConn : MessageBase
+    {
+        public string[] addresses;
+        public int port;
+        public string file;
     }
     #endregion
 
@@ -58,16 +66,39 @@ public sealed class FileShare : MonoBehaviour
 
     IEnumerator RegisterHandlers()
     {
-        yield return new WaitUntil(() => NetworkManager.singleton.IsClientConnected());
+        yield return new WaitUntil(() => NetworkManager.singleton.isNetworkActive);
 
-        NetworkServer.RegisterHandler(fileSharePrepare, ServerPrepare);
-        NetworkManager.singleton.client.RegisterHandler(fileSharePrepare, ClientPrepare);
+        if (NetworkServer.active)
+        {
+            NetworkServer.RegisterHandler(fileSharePrepare, ServerPrepare);
+            NetworkServer.RegisterHandler(getClientsSendFile, ServerConnections);
+        }
+
+        if (NetworkClient.active)
+        {
+            NetworkManager.singleton.client.RegisterHandler(fileSharePrepare, ClientPrepare);
+            NetworkManager.singleton.client.RegisterHandler(getClientsSendFile, SendFileToClients);
+        }
     }
 
     private void ServerPrepare(NetworkMessage netMsg)
     {
         FileSharePrepare msg = netMsg.ReadMessage<FileSharePrepare>();
         NetworkServer.SendToAll(netMsg.msgType, msg);
+    }
+
+    private void ServerConnections(NetworkMessage netMsg)
+    {
+        NetConn msg = netMsg.ReadMessage<NetConn>();
+        List<string> addresses = new List<string>();
+        foreach (var conn in NetworkServer.connections)
+        {
+            if (conn != null)
+                addresses.Add(conn.address);
+        }
+        msg.addresses = addresses.ToArray();
+
+        NetworkServer.SendToClient(netMsg.conn.connectionId, getClientsSendFile, msg);
     }
 
     private void ClientPrepare(NetworkMessage netMsg)
@@ -83,6 +114,17 @@ public sealed class FileShare : MonoBehaviour
         {
             StartCoroutine(WaitForReceivedFile(msg.crc));
             new Thread(() => Host(msg.extension, msg.receiveAction, msg.port)).Start();
+        }
+    }
+
+    private void SendFileToClients(NetworkMessage netMsg)
+    {
+        NetConn msg = netMsg.ReadMessage<NetConn>();
+
+        foreach (var addr in msg.addresses)
+        {
+            //initialize sender
+            new Thread(() => Client(addr.Replace("::ffff:", ""), msg.port, msg.file)).Start();
         }
     }
 
@@ -114,37 +156,28 @@ public sealed class FileShare : MonoBehaviour
     /// <param name="receiveAction">Action identifier after receiving a file</param>
     public static void Send(string file, string receiveAction)
     {
-        if (NetworkServer.connections.Count > 1)
+        if (ports.Count >= (instance.portRangeTo - instance.portRangeFrom))
+            throw new Exception("Not available port");
+
+        int port = instance.portRangeFrom;
+        while (ports.Contains(port) && port < instance.portRangeTo)
+            port++;
+        ports.Add(port);
+
+        //msg to clients, to be prepared
+        NetworkManager.singleton.client.Send(fileSharePrepare, new FileSharePrepare()
         {
-            if (ports.Count >= (instance.portRangeTo - instance.portRangeFrom))
-                throw new Exception("Not available port");
+            crc = GetCRC(file),
+            receiveAction = receiveAction,
+            extension = Path.GetExtension(file),
+            port = port
+        });
 
-            int port = instance.portRangeFrom;
-            while (ports.Contains(port) && port < instance.portRangeTo)
-                port++;
-            ports.Add(port);
-
-            //msg to clients, to be prepared
-            NetworkManager.singleton.client.Send(fileSharePrepare, new FileSharePrepare() {
-                crc = GetCRC(file),
-                receiveAction = receiveAction,
-                extension = Path.GetExtension(file),
-                port = port
-            });
-
-#if UNITY_EDITOR
-            UnityEngine.Debug.Log("Sending file \"" + file + "\" through port " + port);
-#endif
-
-            foreach (var conn in NetworkServer.connections)
-            {
-                if (conn.address == "localClient")
-                    continue;
-
-                //initialize sender
-                new Thread(() => Client(conn.address.Replace("::ffff:", ""), port, file)).Start();
-            }
-        }
+        NetworkManager.singleton.client.Send(getClientsSendFile, new NetConn()
+        {
+            port = port,
+            file = file
+        });
     }
 
     /// <summary>
