@@ -49,6 +49,7 @@ public sealed class FileShare : MonoBehaviour
     static Dictionary<string, FileData> files = new Dictionary<string, FileData>();
     //actions after receiving file, key is custom identifier
     static Dictionary<string, Action<string>> onReceiveActions = new Dictionary<string, Action<string>>();
+    static string tempDirectory;
 
     struct FileData
     {
@@ -62,6 +63,11 @@ public sealed class FileShare : MonoBehaviour
         instance = this;
         r = new System.Random();
         StartCoroutine(RegisterHandlers());
+    }
+
+    public static void SetTempDirectory(string dir)
+    {
+        tempDirectory = dir;
     }
 
     IEnumerator RegisterHandlers()
@@ -199,10 +205,19 @@ public sealed class FileShare : MonoBehaviour
             int recBytes;
 
             string name = DateTime.Now.ToString("yyyyMMddHHmmss_") + r.Next(1000, 10000);
-            //received files are stored in temp
-            string tmpFile = Path.GetTempPath() + name + ".tmp";
-            string normalFile = Path.GetTempPath() + name + extension;
 
+            //received file are stored in temp
+            if (tempDirectory == string.Empty)
+                tempDirectory = Path.GetTempPath();
+            tempDirectory.TrimEnd('/', '\\');
+            tempDirectory += Path.DirectorySeparatorChar;
+            if (!Directory.Exists(tempDirectory))
+                Directory.CreateDirectory(tempDirectory);
+
+            string tmpFile = tempDirectory + name + ".tmp";
+            string normalFile = tempDirectory + name + extension;
+
+            //send file through opened stream
             FileStream fs = new FileStream(tmpFile, FileMode.Create, FileAccess.Write);
             while ((recBytes = netstream.Read(recData, 0, recData.Length)) > 0)
             {
